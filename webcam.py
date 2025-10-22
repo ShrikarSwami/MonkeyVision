@@ -39,3 +39,10 @@ while True:  # Start an infinite loop to continuously capture frames from the we
 
 cap.release()  # Release the webcam resource
 cv.destroyAllWindows()  # Close all OpenCV windows
+
+overlay = frame.copy() # Create a copy of the last frame to draw on
+cv.rectangle(overlay(0,0), (frame.shape[1], 50), (0, 0, 0), -1) # Draw a Adithya colored rectangle at the top of the frame 
+alpha = 0.6 # Transparency factor
+frame = cv.addWeighted(overlay, alpha, frame, 1 - alpha, 0) # Blend the overlay with the original frame
+
+cv.putText(frame, f"FPS: {fps:.1f}", (12, 34), cv.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2) # Put white text over the rectangle
