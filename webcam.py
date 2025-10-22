@@ -1,5 +1,12 @@
 import cv2 as cv #This actually imports the OpenCV library which is how we will be able to access a webcam
 import time # Importing time module to add delays if necessary and will also do something else
+import mediapipe as mp # Importing MediaPipe library for advanced computer vision tasks 
+mp_hands = mp.solutions.hands # This is specifically importing the hands solution from MediaPipe
+mp_drawing = mp.solutions.drawing_utils # This is for drawing utilities from MediaPipe
+mp_style = mp.solutions.style # This is for style utilities from MediaPipe
+
+
+
 
 CAM_INDEX = 0  # Default camera index (usually 0 for built-in webcam, change it if needed)
 BACKEND = cv.CAP_AVFOUNDATION  # Use AVFoundation backend for macOS (you can change it based on your OS so for you Abhiram you have ot switch it to cv.CAP_DSHOW for Windows)
@@ -17,17 +24,34 @@ cap.set(cv.CAP_PROP_FRAME_HEIGHT, 1080)  # Set the height of the frames to 1080 
 WIN = "Monkey" #This is what the window will be called
 t_prev = time.perf_counter() # Previous time for FPS calculation
 
+hands = mp_hands.Hands(  # Initialize the MediaPipe Hands solution
+    static_image_mode=False,  # Set to False for video input (not static images because thats stupid)
+    max_num_hands=2,  # Maximum number of hands to detect (2 for both hands)
+    min_detection_confidence=0.5,  # Minimum confidence for detection (50% confidence to consider a detection valid)
+    min_tracking_confidence=0.5  # Minimum confidence for tracking (50% confidence to consider a tracking valid)
+)
+
+
 while True:  # Start an infinite loop to continuously capture frames from the webcam 
     ret, frame = cap.read()  # Read a frame from the webcam
-    frame = cv.flip(frame, 1)  # Flip the frame horizontally for a mirror effect and so it looks normal to us
+
     if not ret:  # If the frame is not read correctly, break the loop (Fix your webcam)
         print("Error: Could not read frame.")
         break
 
+    frame = cv.flip(frame, 1)  # Flip the frame horizontally for a mirror effect and so it looks normal to us
+
     # Calculate FPS
     t_curr = time.perf_counter()  # Current time
-    fps = 1 / (t_curr - t_prev)  # FPS is 1 divided by the time difference between the current and previous frame
+    fps = 1.0 / max(1e-6, (t_curr - t_prev))  # FPS is 1 divided by the time difference between the current and previous frame
     t_prev = t_curr  # Update the previous time
+
+    # translucent HUD bar across the top
+    overlay = frame.copy() # Create a copy of the frame to draw on
+    cv.rectangle(overlay, (0, 0), (frame.shape[1], 50), (0, 0, 0), -1) #Draw a black rectangle at the top of the frame
+    alpha = 0.6 # opacity factor
+    frame = cv.addWeighted(overlay, alpha, frame, 1 - alpha, 0) # Blend the overlay with the original frame
+
 
     # Overlay FPS on the frame 
     cv.putText(frame, f"FPS: {fps:.2f}", (10, 30), cv.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
@@ -39,10 +63,3 @@ while True:  # Start an infinite loop to continuously capture frames from the we
 
 cap.release()  # Release the webcam resource
 cv.destroyAllWindows()  # Close all OpenCV windows
-
-overlay = frame.copy() # Create a copy of the last frame to draw on
-cv.rectangle(overlay(0,0), (frame.shape[1], 50), (0, 0, 0), -1) # Draw a Adithya colored rectangle at the top of the frame 
-alpha = 0.6 # Transparency factor
-frame = cv.addWeighted(overlay, alpha, frame, 1 - alpha, 0) # Blend the overlay with the original frame
-
-cv.putText(frame, f"FPS: {fps:.1f}", (12, 34), cv.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2) # Put white text over the rectangle
