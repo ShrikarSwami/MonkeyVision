@@ -2,8 +2,10 @@ import cv2 as cv #This actually imports the OpenCV library which is how we will 
 import time # Importing time module to add delays if necessary and will also do something else
 import mediapipe as mp # Importing MediaPipe library for advanced computer vision tasks 
 mp_hands = mp.solutions.hands # This is specifically importing the hands solution from MediaPipe
-mp_drawing = mp.solutions.drawing_utils # This is for drawing utilities from MediaPipe
-mp_style = mp.solutions.style # This is for style utilities from MediaPipe
+mp_draw   = mp.solutions.drawing_utils # This is for drawing the landmarks on the hands
+mp_styles = mp.solutions.drawing_styles # This is for styling the landmarks and connections
+import sys # Importing sys module to handle system-specific parameters and functions (will help for windows vs macOS compatibility)
+import argparse # Importing argparse module to handle command-line arguments (not used in this code but useful for future enhancements)
 
 
 
@@ -13,7 +15,7 @@ BACKEND = cv.CAP_AVFOUNDATION  # Use AVFoundation backend for macOS (you can cha
 
 cap = cv.VideoCapture(CAM_INDEX, BACKEND)  # Create a VideoCapture object to access the webcam (Because Python is object oriented we create an object of the VideoCapture class)
 if not cap.isOpened():  # Check if the webcam is opened correctly
-    print("Error: Could not open webcam, try a different index or check your camera connection.")
+    print("Error: Could not open webcam, try a different index or check your camera connection.") # Print an error message if your webcam doesn't work
     exit()
 
 
@@ -41,6 +43,17 @@ while True:  # Start an infinite loop to continuously capture frames from the we
 
     frame = cv.flip(frame, 1)  # Flip the frame horizontally for a mirror effect and so it looks normal to us
 
+    rgb = cv.cvtColor(frame, cv.COLOR_BGR2RGB)  # Convert the frame from BGR to RGB color space (MediaPipe uses RGB format while OpenCV uses BGR)
+    out = hands.process(rgb)  # Process the RGB frame to detect hands
+    if out.multi_hand_landmarks:  # If hands are detected in the frame
+        for hl in out.multi_hand_landmarks:  # Iterate through each detected hand
+            mp_draw.draw_landmarks(  # Draw the hand landmarks on the original frame
+                frame, hl, mp_hands.HAND_CONNECTIONS,  # Draw landmarks and connections
+                mp_styles.get_default_hand_landmarks_style(),  # Use default style for landmarks
+                mp_styles.get_default_hand_connections_style()  # Use default style for connections
+            )
+
+
     # Calculate FPS
     t_curr = time.perf_counter()  # Current time
     fps = 1.0 / max(1e-6, (t_curr - t_prev))  # FPS is 1 divided by the time difference between the current and previous frame
@@ -63,3 +76,4 @@ while True:  # Start an infinite loop to continuously capture frames from the we
 
 cap.release()  # Release the webcam resource
 cv.destroyAllWindows()  # Close all OpenCV windows
+hands.close()  # Close the MediaPipe Hands solution
