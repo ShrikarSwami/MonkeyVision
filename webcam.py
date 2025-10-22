@@ -94,6 +94,8 @@ while True:  # Start an infinite loop to continuously capture frames from the we
                 mp_styles.get_default_hand_connections_style()  # Use default style for connections
             )
 
+            
+
     #Face mesh detection and drawing
     face_out=face.process(rgb)  # Process the RGB frame to detect face mesh
     if face_out.multi_face_landmarks:  # If face mesh is detected in the frame
@@ -111,6 +113,30 @@ while True:  # Start an infinite loop to continuously capture frames from the we
         #optional label for debugging (comment out later)
         cv.putText(frame, "mouth", (mouth_x + 6, mouth_y - 6), # Label the mouth center for debugging
                cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1) # Label the mouth center for debugging
+        mouth_pt = (mouth_x, mouth_y)  # Create a tuple for the mouth point which will be used for distance calculation
+    else:
+        mouth_pt = None  # If no face is detected, set mouth_pt to None
+
+        label = "NONE"
+h, w = frame.shape[:2]
+
+if out.multi_hand_landmarks:
+    # use the first detected hand for now
+    hl = out.multi_hand_landmarks[0] # Get the first detected hand landmarks
+    lm = hl.landmark # Get the list of landmarks for the hand
+
+    # tip vs PIP test (True == finger up). order: [thumb, index, middle, ring, pinky]
+    TIPS = [4, 8, 12, 16, 20] # Landmark indices for finger tips (Landmark means specific points on the hand that MediaPipe detects)
+    PIPS = [2, 6, 10, 14, 18] # Landmark indices for finger PIP joints (Pip means Proximal Interphalangeal Joint which is the middle joint of the finger)
+    fingers_up = [(lm[t].y < lm[p].y) for t, p in zip(TIPS, PIPS)] # Determine if each finger is up by comparing tip and PIP y-coordinates
+    thumb_up, index_up, middle_up, ring_up, pinky_up = fingers_up # Unpack the finger states into individual variables
+
+    # 1) only middle up (ignore thumb)
+    if middle_up and not index_up and not ring_up and not pinky_up:
+        label = "MIDDLE"
+
+    # 2)
+
 
     # Calculate FPS
     t_curr = time.perf_counter()  # Current time
@@ -126,6 +152,24 @@ while True:  # Start an infinite loop to continuously capture frames from the we
 
     # Overlay FPS on the frame 
     cv.putText(frame, f"FPS: {fps:.2f}", (10, 30), cv.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+
+    # choose a reaction image based on the detected gesture
+    if   stable == "MIDDLE" and img_middle  is not None: show = img_middle
+    elif stable == "SHUSH"  and img_shush   is not None: show = img_shush
+    else:                                                  show = img_neutral
+
+    # display reaction window
+    if show is not None:
+        sh = int(frame.shape[0] * 0.9)
+        scale = sh / show.shape[0]
+        sw = int(show.shape[1] * scale)
+        preview = cv.resize(show, (sw, sh), interpolation=cv.INTER_AREA)
+        cv.imshow(REACTION, preview)
+
+    # draw the current gesture on your HUD
+    cv.putText(frame, f"Gesture: {stable}", (160, 30),
+            cv.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+
 
     cv.imshow(WIN, frame)  # Display the frame in a window named "Monkey" 
 
