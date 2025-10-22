@@ -1,20 +1,15 @@
-# Python
-__pycache__/
-*.py[cod]
-*.egg-info/
-*.log
-
-# Virtualenvs
+# virtual envs
 .venv/
 .venv311/
 venv/
-env/
-
-# OS/Editor
+# python cache
+__pycache__/
+*.pyc
+# macOS cruft
 .DS_Store
+# VS Code
 .vscode/
-.idea/
-
-# Build
-dist/
-build/
+# Big binaries you don't want by accident
+*.whl
+*.dylib
+*.so
