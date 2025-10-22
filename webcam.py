@@ -12,6 +12,12 @@ import math # Importing math module for mathematical operations
 from collections import deque # Importing deque from collections module for efficient appending and popping of elements from both ends 
 import pygame #This will be used for music
 
+#Windows heads like Abhiram should change this to cv.CAP_DSHOW
+import platform
+from pathlib import Path
+import argparse
+
+
 # Alpha-blending function for overlaying images with transparency basically what this means is putting one image on top of another with some see-through effect
 def overlay_bgra(dst, src, x, y, target_w=None, target_h=None):  # Function to overlay images with alpha blending
     """
@@ -65,9 +71,12 @@ def dist(a, b):
     return math.sqrt((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2) #This is just the distance formula on some pythagorean theorem type stuff
 
 #Monkey pictures:
-img_neutral = cv.imread("monkey_neutral.png")
-img_middle  = cv.imread("monkey_say.png")
-img_think   = cv.imread("monkey_think.png")
+ASSETS = Path(__file__).parent
+
+img_neutral = cv.imread(str(ASSETS / "monkey_neutral.png"), cv.IMREAD_UNCHANGED)
+img_middle  = cv.imread(str(ASSETS / "monkey_say.png"),     cv.IMREAD_UNCHANGED)
+img_think   = cv.imread(str(ASSETS / "monkey_think.png"),   cv.IMREAD_UNCHANGED)
+
 
 REACTION = "Monkey"
 cv.namedWindow(REACTION, cv.WINDOW_NORMAL)  # Create a named window for displaying the monkey reaction
@@ -96,6 +105,66 @@ prev_stable = "NEUTRAL" # last frame's smoothed label
 
 CAM_INDEX = 0  # Default camera index (usually 0 for built-in webcam, change it if needed)
 BACKEND = cv.CAP_AVFOUNDATION  # Use AVFoundation backend for macOS (you can change it based on your OS so for you Abhiram you have ot switch it to cv.CAP_DSHOW for Windows)
+
+def pick_backend(name: str | None) -> int | None:
+    """
+    Map a readable backend name to OpenCV's CAP_* constant.
+    Returns None to use OpenCV default if unknown.
+    """
+    if not name:
+        return None
+    name = name.lower()
+    m = {
+        "avfoundation": cv.CAP_AVFOUNDATION,  # macOS
+        "dshow":        cv.CAP_DSHOW,         # Windows
+        "msmf":         cv.CAP_MSMF,          # Windows (alt)
+        "v4l2":         cv.CAP_V4L2,          # Linux
+        "gstreamer":    cv.CAP_GSTREAMER,
+        "any":          None,                 # let OpenCV decide
+        "auto":         -1,                   # we'll compute below
+    }
+    return m.get(name, None)
+
+def auto_backend_for_os() -> int | None:
+    sysname = platform.system()
+    if sysname == "Darwin":   # macOS
+        return cv.CAP_AVFOUNDATION
+    elif sysname == "Windows":
+        # On many Windows systems, DSHOW is the safest default
+        return cv.CAP_DSHOW
+    else:
+        # Linux
+        return cv.CAP_V4L2
+
+# ---- CLI flags (optional, but handy) ----
+parser = argparse.ArgumentParser()
+parser.add_argument("--camera", type=int, default=0, help="Camera index (default 0)")
+parser.add_argument("--backend", type=str, default="auto",
+                    help="Camera backend: auto|avfoundation|dshow|msmf|v4l2|gstreamer|any")
+parser.add_argument("--width",  type=int, default=1920)
+parser.add_argument("--height", type=int, default=1080)
+parser.add_argument("--music",  type=str, default=str(ASSETS / "music.mp3"),
+                    help="Path to mp3 for POINT celebration")
+args, _ = parser.parse_known_args()
+
+# Decide backend
+backend = pick_backend(args.backend)
+if backend == -1:  # "auto"
+    backend = auto_backend_for_os()
+
+# Open camera (with or without explicit backend)
+if backend is None:
+    cap = cv.VideoCapture(args.camera)
+else:
+    cap = cv.VideoCapture(args.camera, backend)
+
+if not cap.isOpened():
+    print("Error: Could not open webcam. Try a different index/backend.")
+    raise SystemExit(1)
+
+cap.set(cv.CAP_PROP_FRAME_WIDTH,  args.width)
+cap.set(cv.CAP_PROP_FRAME_HEIGHT, args.height)
+
 
 cap = cv.VideoCapture(CAM_INDEX, BACKEND)  # Create a VideoCapture object to access the webcam (Because Python is object oriented we create an object of the VideoCapture class)
 if not cap.isOpened():  # Check if the webcam is opened correctly
@@ -130,6 +199,22 @@ face = mp_face.FaceMesh( # Initialize the MediaPipe Face Mesh solution this is u
     min_detection_confidence=0.6,  # Minimum confidence for detection
     min_tracking_confidence=0.6  # Minimum confidence for tracking
 )
+
+
+import pygame
+pygame.mixer.init()
+POINT_SONG = str(ASSETS / "music.mp3")
+point_song_started = False
+
+# One-shot play when POINT first appears
+if not point_song_started and stable == "POINT":
+    try:
+        pygame.mixer.music.load(POINT_SONG)
+        pygame.mixer.music.play()
+        point_song_started = True
+    except Exception as e:
+        print(f"Audio error: {e}")
+
 
 
 """
