@@ -166,12 +166,6 @@ cap.set(cv.CAP_PROP_FRAME_WIDTH,  args.width)
 cap.set(cv.CAP_PROP_FRAME_HEIGHT, args.height)
 
 
-cap = cv.VideoCapture(CAM_INDEX, BACKEND)  # Create a VideoCapture object to access the webcam (Because Python is object oriented we create an object of the VideoCapture class)
-if not cap.isOpened():  # Check if the webcam is opened correctly
-    print("Error: Could not open webcam, try a different index or check your camera connection.") # Print an error message if your webcam doesn't work
-    exit()
-
-
 #(This is setting the resolution of the webcam to 1080 progressive scan (What the p stands for))
 cap.set(cv.CAP_PROP_FRAME_WIDTH, 1920)  # Set the width of the frames to 1920 pixels
 cap.set(cv.CAP_PROP_FRAME_HEIGHT, 1080)  # Set the height of the frames to 1080 pixels
@@ -199,23 +193,6 @@ face = mp_face.FaceMesh( # Initialize the MediaPipe Face Mesh solution this is u
     min_detection_confidence=0.6,  # Minimum confidence for detection
     min_tracking_confidence=0.6  # Minimum confidence for tracking
 )
-
-
-import pygame
-pygame.mixer.init()
-POINT_SONG = str(ASSETS / "music.mp3")
-point_song_started = False
-
-# One-shot play when POINT first appears
-if not point_song_started and stable == "POINT":
-    try:
-        pygame.mixer.music.load(POINT_SONG)
-        pygame.mixer.music.play()
-        point_song_started = True
-    except Exception as e:
-        print(f"Audio error: {e}")
-
-
 
 """
 Main loop to continuously capture frames from the webcam and do all the processing
