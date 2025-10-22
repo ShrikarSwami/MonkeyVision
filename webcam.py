@@ -5,10 +5,36 @@ mp_hands = mp.solutions.hands # This is specifically importing the hands solutio
 mp_draw   = mp.solutions.drawing_utils # This is for drawing the landmarks on the hands
 mp_styles = mp.solutions.drawing_styles # This is for styling the landmarks and connections
 import sys # Importing sys module to handle system-specific parameters and functions (will help for windows vs macOS compatibility)
-import argparse # Importing argparse module to handle command-line arguments (not used in this code but useful for future enhancements)
+import argparse # Importing argparse module to handle command-line arguments 
+import numpy as np #This imports the numpy library which is useful for numerical operations and handling arrays 
+mp_face = mp.solutions.face_mesh # Importing the face mesh solution from MediaPipe this is how we will be able to detect faces
+import math # Importing math module for mathematical operations 
+from collections import deque # Importing deque from collections module for efficient appending and popping of elements from both ends 
 
 
 
+history = deque(maxlen=10) # this will store the last 5 positions of the mouth for smoothing
+
+def lmk_xy(lms, idx, w, h):
+    #normalize landmarks or face mesh points to pixel coordinates
+    return int(lms[idx].x * w), int(lms[idx].y * h) #This looks complicated but its just converting the normalized landmark coordinates to pixel coordinates based on the frame width and height which means multiplying by w and h
+
+def dist(a, b):
+    #Calculate Euclidean distance between two points (Euclidean distance is the straight line distance between two points in 2D space)
+    return math.sqrt((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2) #This is just the distance formula on some pythagorean theorem type stuff
+
+#Monkey pictures:
+img_neutral = cv.imread("monkey_neutral.webp")
+img_middle  = cv.imread("monkey_say.jpg")
+img_shush   = cv.imread("monkey_think.jpg")
+
+REACTION = "Monkey"
+cv.namedWindow(REACTION, cv.WINDOW_NORMAL)  # Create a named window for displaying the monkey reaction
+
+#This is a sanity check to make sure your webcam works and the images load properly
+for name, im in [("neutral", img_neutral), ("middle", img_middle), ("shush", img_shush)]:
+    if im is None:
+        print(f"Error: Could not load image '{name}'. Please ensure the file exists and the path is correct.")
 
 CAM_INDEX = 0  # Default camera index (usually 0 for built-in webcam, change it if needed)
 BACKEND = cv.CAP_AVFOUNDATION  # Use AVFoundation backend for macOS (you can change it based on your OS so for you Abhiram you have ot switch it to cv.CAP_DSHOW for Windows)
@@ -26,23 +52,38 @@ cap.set(cv.CAP_PROP_FRAME_HEIGHT, 1080)  # Set the height of the frames to 1080 
 WIN = "Monkey" #This is what the window will be called
 t_prev = time.perf_counter() # Previous time for FPS calculation
 
-hands = mp_hands.Hands(  # Initialize the MediaPipe Hands solution
+
+#Hand detection setup
+hands = mp_hands.Hands(  # Initialize the MediaPipe Hands solution this is needed to detect hands
     static_image_mode=False,  # Set to False for video input (not static images because thats stupid)
-    max_num_hands=2,  # Maximum number of hands to detect (2 for both hands)
+    max_num_hands=2,  # Maximum number of hands to detect (2 for both hands because that's how many we have but one also works because the monkey has one hand that changes)
     min_detection_confidence=0.5,  # Minimum confidence for detection (50% confidence to consider a detection valid)
     min_tracking_confidence=0.5  # Minimum confidence for tracking (50% confidence to consider a tracking valid)
 )
 
+#Face mesh detection setup
+face = mp_face.FaceMesh( # Initialize the MediaPipe Face Mesh solution this is used to detect face mesh
+    static_image_mode=False,  # Set to False for video input (because again thats stupid)
+    max_num_faces=1,  # Maximum number of faces to detect (1 for single face one single monkey)
+    min_detection_confidence=0.6,  # Minimum confidence for detection
+    min_tracking_confidence=0.6  # Minimum confidence for tracking
+)
 
+# Main loop to continuously capture frames from the webcam and do all the processing
 while True:  # Start an infinite loop to continuously capture frames from the webcam 
     ret, frame = cap.read()  # Read a frame from the webcam
 
+    # Check if frame is read correctly
     if not ret:  # If the frame is not read correctly, break the loop (Fix your webcam)
         print("Error: Could not read frame.")
         break
 
+
+    # Flip the frame horizontally for a mirror effect and so it looks normal to us
     frame = cv.flip(frame, 1)  # Flip the frame horizontally for a mirror effect and so it looks normal to us
 
+
+    # Convert the BGR frame to RGB as MediaPipe requires RGB input and process it to detect hands
     rgb = cv.cvtColor(frame, cv.COLOR_BGR2RGB)  # Convert the frame from BGR to RGB color space (MediaPipe uses RGB format while OpenCV uses BGR)
     out = hands.process(rgb)  # Process the RGB frame to detect hands
     if out.multi_hand_landmarks:  # If hands are detected in the frame
@@ -53,6 +94,23 @@ while True:  # Start an infinite loop to continuously capture frames from the we
                 mp_styles.get_default_hand_connections_style()  # Use default style for connections
             )
 
+    #Face mesh detection and drawing
+    face_out=face.process(rgb)  # Process the RGB frame to detect face mesh
+    if face_out.multi_face_landmarks:  # If face mesh is detected in the frame
+        h, w = frame.shape[:2]  # Get the height and width of the frame
+        fl = face_out.multi_face_landmarks[0].landmark  # Get the first detected face landmarks
+
+        x13, y13 = int(fl[13].x * w), int(fl[13].y * h)  # Get the coordinates of landmark 13 or lower lip
+        x14, y14 = int(fl[14].x * w), int(fl[14].y * h)  # Get the coordinates of landmark 14 or upper lip
+
+        mouth_x = (x13 + x14) // 2  # Calculate the x-coordinate of the mouth center
+        mouth_y = (y13 + y14) // 2  # Calculate the y-coordinate of the mouth center
+
+        #Draw a small circle at the mouth center
+        cv.circle(frame, (mouth_x, mouth_y), 5, (0, 255, 255), -1) # Draw a small yellow circle at the mouth center
+        #optional label for debugging (comment out later)
+        cv.putText(frame, "mouth", (mouth_x + 6, mouth_y - 6), # Label the mouth center for debugging
+               cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1) # Label the mouth center for debugging
 
     # Calculate FPS
     t_curr = time.perf_counter()  # Current time
@@ -77,3 +135,4 @@ while True:  # Start an infinite loop to continuously capture frames from the we
 cap.release()  # Release the webcam resource
 cv.destroyAllWindows()  # Close all OpenCV windows
 hands.close()  # Close the MediaPipe Hands solution
+face.close()  # Close the MediaPipe Face Mesh solution
