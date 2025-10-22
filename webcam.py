@@ -1,21 +1,86 @@
-import cv2 as cv #This actually imports the OpenCV library which is how we will be able to access a webcam
-import time # Importing time module to add delays if necessary and will also do something else
-import mediapipe as mp # Importing MediaPipe library for advanced computer vision tasks 
-mp_hands = mp.solutions.hands # This is specifically importing the hands solution from MediaPipe
-mp_draw   = mp.solutions.drawing_utils # This is for drawing the landmarks on the hands
-mp_styles = mp.solutions.drawing_styles # This is for styling the landmarks and connections
-import sys # Importing sys module to handle system-specific parameters and functions (will help for windows vs macOS compatibility)
-import argparse # Importing argparse module to handle command-line arguments 
-import numpy as np #This imports the numpy library which is useful for numerical operations and handling arrays 
-mp_face = mp.solutions.face_mesh # Importing the face mesh solution from MediaPipe this is how we will be able to detect faces
-import math # Importing math module for mathematical operations 
-from collections import deque # Importing deque from collections module for efficient appending and popping of elements from both ends 
-import pygame #This will be used for music
+import cv2 as cv # OpenCV library for computer vision tasks OpenCV is a powerful library used for image and video processing
+import time # time module for measuring performance and calculating FPS this is for measuring time intervals
+import mediapipe as mp # MediaPipe library for hand and face detection MediaPipe is a framework for building multimodal (e.g., video, audio, etc.) applied ML pipelines this is for hand and face detection
+import sys, platform #This is for getting system information like OS type 
+import numpy as np # NumPy library for numerical operations NumPy is a fundamental package for scientific computing in Python this is for numerical operations
+import math # math module for mathematical functions this is for mathematical calculations 
+import pygame # Pygame library for audio playback Pygame is a set of Python modules designed for writing video games this is for playing audio files
+from pathlib import Path # Pathlib module for handling file paths this is for managing file paths for loading images and music
+from collections import deque # Deque for maintaining a history of gestures this is for storing recent gesture history for smoothing this is for storing recent gesture history for smoothing
+import argparse # Argparse module for parsing command-line arguments this is for handling command-line arguments this is for handling command-line arguments
 
-#Windows heads like Abhiram should change this to cv.CAP_DSHOW
-import platform
-from pathlib import Path
-import argparse
+mp_hands  = mp.solutions.hands
+mp_draw   = mp.solutions.drawing_utils
+mp_styles = mp.solutions.drawing_styles
+mp_face   = mp.solutions.face_mesh
+
+# --- assets dir ---
+ASSETS = Path(__file__).parent # Define the assets directory relative to the script location which is used to load images and music files
+
+# --- parse CLI ARGS (DO THIS BEFORE USING args.* ANYWHERE) ---
+parser = argparse.ArgumentParser() # Create an argument parser object which is used to parse command-line arguments which is used to parse command-line arguments
+parser.add_argument("--camera",  type=int, default=0, help="Camera index") #Basically this is saying which camera to use if you have multiple cameras connected
+parser.add_argument("--backend", type=str, default="auto", # Basically this is saying which backend to use for the camera
+                    help="auto|avfoundation|dshow|msmf|v4l2|gstreamer|any") # This says what backends are available
+parser.add_argument("--width",   type=int, default=1920) # This is saying what width to set the camera to 1920 pixels
+parser.add_argument("--height",  type=int, default=1080) # This is saying what height to set the camera to 1080 pixels
+parser.add_argument("--music",   type=str, default=str(ASSETS / "music.mp3"), # This is saying what music file to use for the POINT celebration
+                    help="Path to mp3 for POINT celebration") # This is saying what music file to use for the POINT celebration that is stored in the assets folder
+args = parser.parse_args() # Parse the command-line arguments and store them in the args variable which is used to access the parsed arguments
+MUSIC_PATH = args.music
+
+# ... your imports/mediapipe aliases, functions, overlay_bgra, etc. ...
+
+def pick_backend(name: str | None) -> int | None: # This function maps backend names to OpenCV backend constants
+    # Map a readable backend name to OpenCV's CAP_* constant. 
+    # Below returns None to use OpenCV default if unknown.
+    m = { 
+        "avfoundation": cv.CAP_AVFOUNDATION,
+        "dshow":        cv.CAP_DSHOW,
+        "msmf":         cv.CAP_MSMF,
+        "v4l2":         cv.CAP_V4L2,
+        "gstreamer":    cv.CAP_GSTREAMER,
+        "any":          None,
+        "auto":         -1,
+    }
+    return m.get((name or "").lower(), None)
+# Automatically pick backend based on OS if "auto" is selected 
+def auto_backend_for_os() -> int | None:
+    return (cv.CAP_AVFOUNDATION if platform.system()=="Darwin"
+            else cv.CAP_DSHOW if platform.system()=="Windows"
+            else cv.CAP_V4L2)
+
+# --- decide backend ---
+backend = pick_backend(args.backend)
+if backend == -1:
+    backend = auto_backend_for_os()
+
+# --- open camera using chosen backend ---
+if backend is None:
+    cap = cv.VideoCapture(args.camera)
+else:
+    cap = cv.VideoCapture(args.camera, backend)
+if not cap.isOpened():
+    print("Error: Could not open webcam. Try a different index/backend.")
+    sys.exit(1)
+cap.set(cv.CAP_PROP_FRAME_WIDTH,  args.width)
+cap.set(cv.CAP_PROP_FRAME_HEIGHT, args.height)
+
+# --- load images (now that ASSETS is defined) ---
+img_neutral = cv.imread(str(ASSETS / "monkey_neutral.png"), cv.IMREAD_UNCHANGED)
+img_middle  = cv.imread(str(ASSETS / "monkey_say.png"),     cv.IMREAD_UNCHANGED)
+img_think   = cv.imread(str(ASSETS / "monkey_think.png"),   cv.IMREAD_UNCHANGED)
+
+# --- init pygame music AFTER MUSIC_PATH is set ---
+MUSIC_READY = False
+try:
+    pygame.mixer.init()
+    pygame.mixer.music.load(MUSIC_PATH)
+    pygame.mixer.music.set_volume(0.8)
+    MUSIC_READY = True
+except Exception as e:
+    print(f"[audio] init/load failed: {e}")
+
 
 
 # Alpha-blending function for overlaying images with transparency basically what this means is putting one image on top of another with some see-through effect
@@ -70,82 +135,25 @@ def dist(a, b):
     #Calculate Euclidean distance between two points (Euclidean distance is the straight line distance between two points in 2D space)
     return math.sqrt((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2) #This is just the distance formula on some pythagorean theorem type stuff
 
-#Monkey pictures:
-ASSETS = Path(__file__).parent
-
-img_neutral = cv.imread(str(ASSETS / "monkey_neutral.png"), cv.IMREAD_UNCHANGED)
-img_middle  = cv.imread(str(ASSETS / "monkey_say.png"),     cv.IMREAD_UNCHANGED)
-img_think   = cv.imread(str(ASSETS / "monkey_think.png"),   cv.IMREAD_UNCHANGED)
-
-
-REACTION = "Monkey"
-cv.namedWindow(REACTION, cv.WINDOW_NORMAL)  # Create a named window for displaying the monkey reaction
-
 #This is a sanity check to make sure your webcam works and the images load properly
 for name, im in [("neutral", img_neutral), ("middle", img_middle), ("think", img_think)]:
     if im is None:
         print(f"Error: Could not load image '{name}'. Please ensure the file exists and the path is correct.")
 
 # --- music setup ---
-MUSIC_PATH = "music.mp3" # Path to the music file
-MUSIC_READY = False # Flag to indicate if music is ready to play
-try: # Try to initialize the music player
-    pygame.mixer.init()             # init audio device
-    pygame.mixer.music.load(MUSIC_PATH) # load music file
-    pygame.mixer.music.set_volume(0.8)  # 0.0 - 1.0 set volume
-     # If everything is successful, set MUSIC_READY to True
-    MUSIC_READY = True # Music is ready to play
+MUSIC_READY = False # flag to indicate if music is ready 
+try: # initialize pygame mixer and load music
+    pygame.mixer.init() # Initialize the pygame mixer for audio playback
+    pygame.mixer.music.load(MUSIC_PATH) # Load the music file specified by MUSIC_PATH
+    pygame.mixer.music.set_volume(0.8) # Set the volume for music playback (0.0 to 1.0)
+    MUSIC_READY = True # Set the MUSIC_READY flag to True indicating that music is ready to be played
 except Exception as e: # If there is an error during initialization or loading
     print(f"[audio] init/load failed: {e}") # Print the error message
+
 
 # --- state variables ---
 played_song = False     # have we already played the song once?
 prev_stable = "NEUTRAL" # last frame's smoothed label
-
-
-CAM_INDEX = 0  # Default camera index (usually 0 for built-in webcam, change it if needed)
-BACKEND = cv.CAP_AVFOUNDATION  # Use AVFoundation backend for macOS (you can change it based on your OS so for you Abhiram you have ot switch it to cv.CAP_DSHOW for Windows)
-
-def pick_backend(name: str | None) -> int | None:
-    """
-    Map a readable backend name to OpenCV's CAP_* constant.
-    Returns None to use OpenCV default if unknown.
-    """
-    if not name:
-        return None
-    name = name.lower()
-    m = {
-        "avfoundation": cv.CAP_AVFOUNDATION,  # macOS
-        "dshow":        cv.CAP_DSHOW,         # Windows
-        "msmf":         cv.CAP_MSMF,          # Windows (alt)
-        "v4l2":         cv.CAP_V4L2,          # Linux
-        "gstreamer":    cv.CAP_GSTREAMER,
-        "any":          None,                 # let OpenCV decide
-        "auto":         -1,                   # we'll compute below
-    }
-    return m.get(name, None)
-
-def auto_backend_for_os() -> int | None:
-    sysname = platform.system()
-    if sysname == "Darwin":   # macOS
-        return cv.CAP_AVFOUNDATION
-    elif sysname == "Windows":
-        # On many Windows systems, DSHOW is the safest default
-        return cv.CAP_DSHOW
-    else:
-        # Linux
-        return cv.CAP_V4L2
-
-# ---- CLI flags (optional, but handy) ----
-parser = argparse.ArgumentParser()
-parser.add_argument("--camera", type=int, default=0, help="Camera index (default 0)")
-parser.add_argument("--backend", type=str, default="auto",
-                    help="Camera backend: auto|avfoundation|dshow|msmf|v4l2|gstreamer|any")
-parser.add_argument("--width",  type=int, default=1920)
-parser.add_argument("--height", type=int, default=1080)
-parser.add_argument("--music",  type=str, default=str(ASSETS / "music.mp3"),
-                    help="Path to mp3 for POINT celebration")
-args, _ = parser.parse_known_args()
 
 # Decide backend
 backend = pick_backend(args.backend)
@@ -162,15 +170,11 @@ if not cap.isOpened():
     print("Error: Could not open webcam. Try a different index/backend.")
     raise SystemExit(1)
 
-cap.set(cv.CAP_PROP_FRAME_WIDTH,  args.width)
-cap.set(cv.CAP_PROP_FRAME_HEIGHT, args.height)
-
-
-#(This is setting the resolution of the webcam to 1080 progressive scan (What the p stands for))
-cap.set(cv.CAP_PROP_FRAME_WIDTH, 1920)  # Set the width of the frames to 1920 pixels
-cap.set(cv.CAP_PROP_FRAME_HEIGHT, 1080)  # Set the height of the frames to 1080 pixels
+cap.set(cv.CAP_PROP_FRAME_WIDTH,  args.width) # Set the desired width of the webcam frames
+cap.set(cv.CAP_PROP_FRAME_HEIGHT, args.height) # Set the desired height of the webcam frames
 
 WIN = "Monkey" #This is what the window will be called
+cv.namedWindow(WIN, cv.WINDOW_NORMAL) # Create a named window for displaying the webcam feed
 t_prev = time.perf_counter() # Previous time for FPS calculation
 
 
