@@ -10,7 +10,7 @@ import numpy as np #This imports the numpy library which is useful for numerical
 mp_face = mp.solutions.face_mesh # Importing the face mesh solution from MediaPipe this is how we will be able to detect faces
 import math # Importing math module for mathematical operations 
 from collections import deque # Importing deque from collections module for efficient appending and popping of elements from both ends 
-
+import pygame #This will be used for music
 
 # Alpha-blending function for overlaying images with transparency basically what this means is putting one image on top of another with some see-through effect
 def overlay_bgra(dst, src, x, y, target_w=None, target_h=None):  # Function to overlay images with alpha blending
@@ -76,6 +76,23 @@ cv.namedWindow(REACTION, cv.WINDOW_NORMAL)  # Create a named window for displayi
 for name, im in [("neutral", img_neutral), ("middle", img_middle), ("think", img_think)]:
     if im is None:
         print(f"Error: Could not load image '{name}'. Please ensure the file exists and the path is correct.")
+
+# --- music setup ---
+MUSIC_PATH = "music.mp3" # Path to the music file
+MUSIC_READY = False # Flag to indicate if music is ready to play
+try: # Try to initialize the music player
+    pygame.mixer.init()             # init audio device
+    pygame.mixer.music.load(MUSIC_PATH) # load music file
+    pygame.mixer.music.set_volume(0.8)  # 0.0 - 1.0 set volume
+     # If everything is successful, set MUSIC_READY to True
+    MUSIC_READY = True # Music is ready to play
+except Exception as e: # If there is an error during initialization or loading
+    print(f"[audio] init/load failed: {e}") # Print the error message
+
+# --- state variables ---
+played_song = False     # have we already played the song once?
+prev_stable = "NEUTRAL" # last frame's smoothed label
+
 
 CAM_INDEX = 0  # Default camera index (usually 0 for built-in webcam, change it if needed)
 BACKEND = cv.CAP_AVFOUNDATION  # Use AVFoundation backend for macOS (you can change it based on your OS so for you Abhiram you have ot switch it to cv.CAP_DSHOW for Windows)
@@ -214,6 +231,20 @@ while True:  # Start an infinite loop to continuously capture frames from the we
     history.append(label) # Append the current label to the history deque
     stable = max(set(history), key=history.count) if history else "NEUTRAL" # Get the most frequent label in the history for stability
 
+    # --- play once when we FIRST enter POINT ---
+    if MUSIC_READY and not played_song and prev_stable != "POINT" and stable == "POINT": # If music is ready, song has not been played yet, previous stable label was not POINT, and current stable label is POINT
+        #  play the song
+        try: # Try to play the music
+            pygame.mixer.music.play()  # non-blocking # Play the music file (non-blocking means it won't stop the program while playing)
+             # Set played_song to True to indicate that the song has been played
+            played_song = True # Mark that the song has been played
+        except Exception as e: # If there is an error while trying to play the music
+             # Print the error message
+            print(f"[audio] play failed: {e}") # Print the error message
+    # Reset the played_song flag when leaving POINT
+    prev_stable = stable # Update the previous stable label to the current stable label
+ 
+
     # --- HUD: FPS bar ---
     # This could also be commented out if you want
     t_curr = time.perf_counter() # Current time for FPS calculation
@@ -283,6 +314,9 @@ while True:  # Start an infinite loop to continuously capture frames from the we
 """
 The lines below this point are for cleanup and releasing resources after the main loop ends.
 """
+if MUSIC_READY: # If music was initialized successfully
+    pygame.mixer.music.stop() # Stop the music playback
+    pygame.mixer.quit() # Quit the pygame mixer to release audio resources
 cap.release()  # Release the webcam resource
 cv.destroyAllWindows()  # Close all OpenCV windows
 hands.close()  # Close the MediaPipe Hands solution
