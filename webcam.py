@@ -1,7 +1,7 @@
 import cv2 as cv # OpenCV library for computer vision tasks OpenCV is a powerful library used for image and video processing
 import time # time module for measuring performance and calculating FPS this is for measuring time intervals
 import mediapipe as mp # MediaPipe library for hand and face detection MediaPipe is a framework for building multimodal (e.g., video, audio, etc.) applied ML pipelines this is for hand and face detection
-import sys, platform #This is for getting system information like OS type 
+import sys, platform #p is for getting system information like OS type 
 import numpy as np # NumPy library for numerical operations NumPy is a fundamental package for scientific computing in Python this is for numerical operations
 import math # math module for mathematical functions this is for mathematical calculations 
 import pygame # Pygame library for audio playback Pygame is a set of Python modules designed for writing video games this is for playing audio files
